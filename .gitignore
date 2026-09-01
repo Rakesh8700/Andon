@@ -1,0 +1,15 @@
+# Local database — never commit real/local data to the repo
+andon.db
+andon.db-journal
+andon.db-wal
+andon.db-shm
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS / editor
+.DS_Store
+Thumbs.db

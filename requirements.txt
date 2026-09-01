@@ -1,0 +1,3 @@
+# Only needed for PostgreSQL (production/Render deploy).
+# Locally the app runs on SQLite with no dependencies.
+psycopg[binary]==3.2.3

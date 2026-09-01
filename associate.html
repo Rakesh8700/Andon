@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Andon Support — Associate</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Amazon Ember", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    background: #12151b; color: #e8edf2; min-height: 100vh;
+    display: flex; align-items: center; justify-content: center; padding: 24px;
+  }
+  .card {
+    width: 100%; max-width: 560px; background: #1b1f27; border: 1px solid #2a2f3a;
+    border-radius: 12px; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+  }
+  .card-head {
+    padding: 18px 22px; border-bottom: 1px solid #2a2f3a;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .card-head h1 { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .card-head .who { font-size: 12px; color: #8a94a3; }
+  .card-body { padding: 22px; }
+
+  label { display: block; font-size: 12px; color: #9aa4b2; margin-bottom: 6px; }
+  input[type=text], textarea {
+    width: 100%; padding: 11px 12px; background: #12151b; border: 1px solid #2f3542;
+    border-radius: 8px; color: #e8edf2; font-size: 14px; outline: none;
+  }
+  input[type=text]:focus, textarea:focus { border-color: #f0932b; }
+  textarea { resize: vertical; min-height: 72px; }
+  .hint { font-size: 11px; color: #6b7480; margin-top: 6px; }
+
+  .btn {
+    width: 100%; padding: 12px; border: none; border-radius: 8px; cursor: pointer;
+    font-size: 14px; font-weight: 700; margin-top: 16px;
+  }
+  .btn-primary { background: #f0932b; color: #1a1207; }
+  .btn-primary:hover { background: #e0850f; }
+  .btn-primary:disabled { background: #3a3f49; color: #6b7480; cursor: not-allowed; }
+  .btn-ghost { background: transparent; border: 1px solid #3a3f49; color: #c5ccd6; }
+  .btn-ghost:hover { border-color: #6b7480; }
+
+  .step { display: none; }
+  .step.active { display: block; }
+
+  /* screenshot area */
+  .ss-area {
+    border: 2px dashed #3a3f49; border-radius: 10px; padding: 26px; text-align: center;
+    color: #8a94a3; font-size: 13px; cursor: pointer; min-height: 120px;
+    display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px;
+  }
+  .ss-area:hover { border-color: #f0932b; }
+  .ss-preview { display: none; }
+  .ss-preview canvas { width: 100%; border-radius: 8px; border: 1px solid #2f3542; display: block; cursor: crosshair; touch-action: none; }
+  .ss-tools { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .ss-tool { background: transparent; border: 1px solid #3a3f49; color: #c5ccd6; border-radius: 6px; padding: 5px 12px; cursor: pointer; font-size: 12px; }
+  .ss-tool:hover { border-color: #f0932b; }
+  .ss-tool.active { border-color: #f0932b; color: #f0932b; }
+  .ss-preview .rm {
+    background: transparent; border: 1px solid #6b3a3a; color: #ff8f8f;
+    border-radius: 6px; padding: 5px 12px; cursor: pointer; font-size: 12px; margin-left: auto;
+  }
+
+  /* waiting / response */
+  .status-badge { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 14px; font-size: 12px; margin-bottom: 16px; }
+  .status-badge.waiting { background: rgba(240,147,43,0.15); color: #f0932b; }
+  .status-badge.answered { background: rgba(76,175,80,0.15); color: #66bb6a; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  .status-badge.waiting .dot { animation: pulse 1.4s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+  .summary { background: #12151b; border: 1px solid #2a2f3a; border-radius: 8px; padding: 14px; margin-bottom: 16px; font-size: 13px; }
+  .summary .row { margin-bottom: 8px; }
+  .summary .k { color: #6b7480; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .summary img { width: 100%; border-radius: 6px; margin-top: 6px; border: 1px solid #2a2f3a; }
+
+  .answer-box { background: rgba(76,175,80,0.08); border: 1px solid rgba(76,175,80,0.3); border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+  .answer-box .sme { font-size: 11px; color: #66bb6a; font-weight: 700; margin-bottom: 4px; }
+  .answer-box .txt { font-size: 14px; color: #e8edf2; line-height: 1.5; }
+  .answer-box .ts { font-size: 10px; color: #6b7480; margin-top: 6px; }
+
+  .toast { position: fixed; top: 18px; left: 50%; transform: translate(-50%,-120%); background: #c0392b; color: #fff; padding: 10px 18px; border-radius: 6px; font-size: 13px; z-index: 999; transition: transform .3s; }
+  .toast.show { transform: translate(-50%,0); }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="card-head">
+      <h1>&#128680; Andon Support</h1>
+      <span class="who" id="whoami"></span>
+    </div>
+    <div class="card-body">
+
+      <!-- STEP 1: LOGIN -->
+      <div class="step active" id="stepLogin">
+        <label for="login">Enter your login / alias</label>
+        <input type="text" id="login" placeholder="e.g. rakiir" autocomplete="off" autofocus
+               onkeydown="if(event.key==='Enter')doLogin()">
+        <div class="hint">Press Enter to continue.</div>
+        <button class="btn btn-primary" onclick="doLogin()">Continue</button>
+      </div>
+
+      <!-- STEP 2: COMPOSE QUERY -->
+      <div class="step" id="stepCompose">
+        <label>Screenshot (click to upload or Ctrl+V to paste)</label>
+        <div class="ss-area" id="ssArea">
+          <span>&#128247; Click to upload or press Ctrl+V to paste</span>
+          <input type="file" id="ssFile" accept="image/*" style="display:none">
+        </div>
+        <div class="ss-preview" id="ssPreview">
+          <canvas id="ssCanvas"></canvas>
+          <div class="ss-tools">
+            <button type="button" class="ss-tool active" data-tool="rect" onclick="setTool('rect')">▭ Rectangle</button>
+            <button type="button" class="ss-tool" data-tool="free" onclick="setTool('free')">✎ Freehand</button>
+            <button type="button" class="ss-tool" onclick="clearMarkup()">↺ Clear marks</button>
+            <button type="button" class="rm" onclick="clearImage()">Remove image</button>
+          </div>
+          <div class="hint">Draw on the image to highlight your doubt.</div>
+        </div>
+
+        <label style="margin-top:16px;">Short comment</label>
+        <textarea id="comment" placeholder="Describe your doubt in a line or two..."
+                  onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();submitQuery();}"></textarea>
+        <div class="hint">Press Enter to submit (Shift+Enter for a new line).</div>
+        <button class="btn btn-primary" id="submitBtn" onclick="submitQuery()">Submit query</button>
+      </div>
+
+      <!-- STEP 3: WAITING / RESPONSE -->
+      <div class="step" id="stepWaiting">
+        <div class="status-badge waiting" id="statusBadge"><span class="dot"></span><span id="statusText">Waiting for SME response...</span></div>
+
+        <div class="summary">
+          <div class="row"><div class="k">Your query</div><div id="sumComment"></div></div>
+          <div id="sumImageWrap" style="display:none;"><img id="sumImage"></div>
+        </div>
+
+        <div id="answers"></div>
+
+        <button class="btn btn-primary" id="resolveBtn" style="display:none;" onclick="resolveQuery()">Got it — mark resolved</button>
+        <button class="btn btn-ghost" onclick="newQuery()">Raise another query</button>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+let associateLogin = '';
+let currentQueryId = null;
+let currentImage = null;
+let pollTimer = null;
+
+function show(step) {
+  document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+  document.getElementById(step).classList.add('active');
+}
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+/* ---- STEP 1: login ---- */
+function doLogin() {
+  const v = document.getElementById('login').value.trim();
+  if (!v) { toast('Please enter your login.'); return; }
+  associateLogin = v;
+  document.getElementById('whoami').textContent = 'Logged in as ' + v;
+  show('stepCompose');
+  document.getElementById('comment').focus();
+}
+
+/* ---- STEP 2: image + comment ---- */
+const ssArea = document.getElementById('ssArea');
+const ssFile = document.getElementById('ssFile');
+const ssCanvas = document.getElementById('ssCanvas');
+const ssCtx = ssCanvas.getContext('2d');
+
+let baseImg = null;          // the loaded Image
+let marks = [];              // [{type:'rect',x,y,w,h} | {type:'free',path:[{x,y}]}]
+let tool = 'rect';
+let drawing = false, start = null, freePath = [];
+
+ssArea.addEventListener('click', () => ssFile.click());
+ssFile.addEventListener('change', e => { if (e.target.files[0]) loadImage(e.target.files[0]); });
+document.addEventListener('paste', e => {
+  if (!document.getElementById('stepCompose').classList.contains('active')) return;
+  for (const it of e.clipboardData.items) {
+    if (it.type.indexOf('image') === 0) { loadImage(it.getAsFile()); break; }
+  }
+});
+
+function loadImage(file) {
+  const reader = new FileReader();
+  reader.onload = ev => {
+    baseImg = new Image();
+    baseImg.onload = () => {
+      // Cap width to keep the canvas manageable.
+      const maxW = 520;
+      const sc = Math.min(1, maxW / baseImg.naturalWidth);
+      ssCanvas.width = Math.round(baseImg.naturalWidth * sc);
+      ssCanvas.height = Math.round(baseImg.naturalHeight * sc);
+      marks = [];
+      document.getElementById('ssArea').style.display = 'none';
+      document.getElementById('ssPreview').style.display = 'block';
+      redraw();
+    };
+    baseImg.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearImage() {
+  baseImg = null; marks = []; currentImage = null;
+  document.getElementById('ssFile').value = '';
+  document.getElementById('ssArea').style.display = 'flex';
+  document.getElementById('ssPreview').style.display = 'none';
+}
+
+function setTool(t) {
+  tool = t;
+  document.querySelectorAll('.ss-tool[data-tool]').forEach(b =>
+    b.classList.toggle('active', b.dataset.tool === t));
+}
+function clearMarkup() { marks = []; redraw(); }
+
+function redraw() {
+  if (!baseImg) return;
+  ssCtx.clearRect(0, 0, ssCanvas.width, ssCanvas.height);
+  ssCtx.drawImage(baseImg, 0, 0, ssCanvas.width, ssCanvas.height);
+  ssCtx.strokeStyle = '#ff3b3b';
+  ssCtx.lineWidth = 3;
+  ssCtx.lineJoin = 'round';
+  ssCtx.lineCap = 'round';
+  marks.forEach(m => {
+    if (m.type === 'rect') {
+      ssCtx.strokeRect(m.x, m.y, m.w, m.h);
+    } else if (m.type === 'free' && m.path.length) {
+      ssCtx.beginPath();
+      ssCtx.moveTo(m.path[0].x, m.path[0].y);
+      m.path.forEach(p => ssCtx.lineTo(p.x, p.y));
+      ssCtx.stroke();
+    }
+  });
+}
+
+function canvasPos(e) {
+  const r = ssCanvas.getBoundingClientRect();
+  return {
+    x: (e.clientX - r.left) * (ssCanvas.width / r.width),
+    y: (e.clientY - r.top) * (ssCanvas.height / r.height),
+  };
+}
+ssCanvas.addEventListener('mousedown', e => {
+  if (!baseImg) return;
+  drawing = true; start = canvasPos(e); freePath = [start];
+});
+ssCanvas.addEventListener('mousemove', e => {
+  if (!drawing) return;
+  const p = canvasPos(e);
+  redraw();
+  ssCtx.strokeStyle = '#ff3b3b'; ssCtx.lineWidth = 3; ssCtx.lineJoin = 'round'; ssCtx.lineCap = 'round';
+  if (tool === 'rect') {
+    ssCtx.strokeRect(start.x, start.y, p.x - start.x, p.y - start.y);
+  } else {
+    freePath.push(p);
+    ssCtx.beginPath(); ssCtx.moveTo(freePath[0].x, freePath[0].y);
+    freePath.forEach(q => ssCtx.lineTo(q.x, q.y)); ssCtx.stroke();
+  }
+});
+window.addEventListener('mouseup', e => {
+  if (!drawing) return;
+  drawing = false;
+  const p = canvasPos(e);
+  if (tool === 'rect') {
+    if (Math.abs(p.x - start.x) > 2 && Math.abs(p.y - start.y) > 2)
+      marks.push({ type: 'rect', x: start.x, y: start.y, w: p.x - start.x, h: p.y - start.y });
+  } else if (freePath.length > 1) {
+    marks.push({ type: 'free', path: freePath.slice() });
+  }
+  redraw();
+});
+
+async function submitQuery() {
+  const comment = document.getElementById('comment').value.trim();
+  if (!comment) { toast('Please write a short comment.'); return; }
+  // Flatten image + markup into the submitted image.
+  currentImage = baseImg ? ssCanvas.toDataURL('image/png') : null;
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true; btn.textContent = 'Submitting...';
+  try {
+    const res = await fetch('/api/queries', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ associate_login: associateLogin, comment, image: currentImage })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to submit');
+    currentQueryId = data.id;
+    // fill summary
+    document.getElementById('sumComment').textContent = comment;
+    if (currentImage) {
+      document.getElementById('sumImage').src = currentImage;
+      document.getElementById('sumImageWrap').style.display = 'block';
+    }
+    show('stepWaiting');
+    startPolling();
+  } catch (err) {
+    toast(err.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Submit query';
+  }
+}
+
+/* ---- STEP 3: poll for answers ---- */
+function startPolling() {
+  stopPolling();
+  pollTimer = setInterval(checkAnswers, 2000);
+  checkAnswers();
+}
+function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+
+async function checkAnswers() {
+  if (!currentQueryId) return;
+  try {
+    const res = await fetch('/api/query?id=' + currentQueryId);
+    const q = await res.json();
+    if (q.error) return;
+    const answers = q.answers || [];
+    const wrap = document.getElementById('answers');
+    if (answers.length) {
+      document.getElementById('statusBadge').className = 'status-badge answered';
+      document.getElementById('statusText').textContent = 'SME responded';
+      document.getElementById('resolveBtn').style.display = q.status === 'resolved' ? 'none' : 'block';
+      wrap.innerHTML = answers.map(a =>
+        '<div class="answer-box">' +
+          '<div class="sme">' + escapeHtml(a.sme_login) + ' (SME)</div>' +
+          '<div class="txt">' + escapeHtml(a.response_text) + '</div>' +
+          '<div class="ts">' + fmt(a.created_at) + '</div>' +
+        '</div>'
+      ).join('');
+      if (q.status === 'resolved') {
+        document.getElementById('statusText').textContent = 'Resolved';
+        stopPolling();
+      }
+    }
+  } catch (e) { /* transient network error, keep polling */ }
+}
+
+async function resolveQuery() {
+  await fetch('/api/resolve', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query_id: currentQueryId })
+  });
+  document.getElementById('resolveBtn').style.display = 'none';
+  document.getElementById('statusText').textContent = 'Resolved';
+  stopPolling();
+  toast('Marked resolved.');
+}
+
+function newQuery() {
+  stopPolling();
+  currentQueryId = null;
+  clearImage();
+  document.getElementById('comment').value = '';
+  document.getElementById('answers').innerHTML = '';
+  document.getElementById('statusBadge').className = 'status-badge waiting';
+  document.getElementById('statusText').textContent = 'Waiting for SME response...';
+  document.getElementById('resolveBtn').style.display = 'none';
+  show('stepCompose');
+}
+
+function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmt(iso){ try { return new Date(iso).toLocaleString(); } catch(e){ return iso; } }
+</script>
+</body>
+</html>
