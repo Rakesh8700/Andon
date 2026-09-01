@@ -61,6 +61,7 @@
       <button class="btn primary" onclick="exportCsv()">Export CSV</button>
       <a class="btn" href="sme.html">SME Console</a>
       <a class="btn" href="associate.html">Associate</a>
+      <button class="btn" onclick="andonLogout()">Log out</button>
     </div>
   </div>
 
@@ -100,6 +101,11 @@
 
 <script>
 let lastQueries = [];
+
+async function andonLogout() {
+  try { await fetch('/api/logout', { method: 'POST' }); } catch (e) {}
+  location.href = '/login.html';
+}
 
 function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function fmt(iso){ try { return new Date(iso).toLocaleString(); } catch(e){ return iso; } }

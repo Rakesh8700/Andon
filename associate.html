@@ -89,7 +89,7 @@
   <div class="card">
     <div class="card-head">
       <h1>&#128680; Andon Support</h1>
-      <span class="who" id="whoami"></span>
+      <span class="who"><span id="whoami"></span> <a href="#" onclick="andonLogout();return false;" style="color:#8a94a3;margin-left:10px;">Log out</a></span>
     </div>
     <div class="card-body">
 
@@ -152,6 +152,11 @@ let associateLogin = '';
 let currentQueryId = null;
 let currentImage = null;
 let pollTimer = null;
+
+async function andonLogout() {
+  try { await fetch('/api/logout', { method: 'POST' }); } catch (e) {}
+  location.href = '/login.html';
+}
 
 function show(step) {
   document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));

@@ -192,9 +192,70 @@ def execute_rowcount(sql, params=()):
         return rc
 
 
+# ---------------------------------------------------------------------------
+# Authentication (shared-password gate).
+#   - Set ANDON_PASSWORD to require a password before anyone can use the app.
+#   - If ANDON_PASSWORD is not set, the app is OPEN (no login) — only do this
+#     for local dev / sample-data demos, never for real data on a public URL.
+#   - On success we set a signed session cookie. The signature uses a secret so
+#     cookies can't be forged; set ANDON_SECRET in production for stability.
+# NOTE: On plain HTTP the password is sent unencrypted. Add HTTPS for real data.
+# ---------------------------------------------------------------------------
+import hmac
+import hashlib
+import base64
+import time
+import secrets as _secrets
+
+ANDON_PASSWORD = os.environ.get("ANDON_PASSWORD", "").strip()
+AUTH_ENABLED = bool(ANDON_PASSWORD)
+# Secret for signing session cookies. Falls back to a random per-run secret
+# (sessions won't survive a restart unless you set ANDON_SECRET explicitly).
+ANDON_SECRET = (os.environ.get("ANDON_SECRET", "").strip() or _secrets.token_hex(32)).encode()
+SESSION_TTL = 12 * 60 * 60  # 12 hours
+COOKIE_NAME = "andon_session"
+
+
+def make_token():
+    """Create a signed token: base64(expiry).signature."""
+    expiry = str(int(time.time()) + SESSION_TTL).encode()
+    payload = base64.urlsafe_b64encode(expiry)
+    sig = hmac.new(ANDON_SECRET, payload, hashlib.sha256).hexdigest()
+    return payload.decode() + "." + sig
+
+
+def verify_token(token):
+    """Return True if the token's signature is valid and it hasn't expired."""
+    try:
+        payload, sig = token.split(".", 1)
+        expected = hmac.new(ANDON_SECRET, payload.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(sig, expected):
+            return False
+        expiry = int(base64.urlsafe_b64decode(payload.encode()))
+        return time.time() < expiry
+    except Exception:
+        return False
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=BASE_DIR, **kwargs)
+
+    # ---- auth helpers --------------------------------------------
+    def _cookies(self):
+        raw = self.headers.get("Cookie", "")
+        jar = {}
+        for part in raw.split(";"):
+            if "=" in part:
+                k, v = part.strip().split("=", 1)
+                jar[k] = v
+        return jar
+
+    def _is_authed(self):
+        if not AUTH_ENABLED:
+            return True
+        token = self._cookies().get(COOKIE_NAME, "")
+        return verify_token(token)
 
     # ---- helpers -------------------------------------------------
     def _send_json(self, obj, status=200):
@@ -221,16 +282,38 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
 
     # ---- routing -------------------------------------------------
+    # Paths always allowed without a session (the login page + auth endpoints).
+    PUBLIC_PATHS = {"/login.html", "/api/login", "/api/me"}
+
+    def _path_only(self):
+        return self.path.split("?")[0]
+
     def do_GET(self):
-        if self.path.startswith("/api/"):
+        path = self._path_only()
+        if path.startswith("/api/"):
+            # /api/me and /api/login are public; everything else needs auth.
+            if AUTH_ENABLED and path not in self.PUBLIC_PATHS and not self._is_authed():
+                return self._send_json({"error": "unauthorized"}, 401)
             return self.handle_api_get()
-        # default: serve static files (associate.html, sme.html, dashboard.html, ...)
+
+        # Static pages.
         if self.path == "/" or self.path == "":
-            self.path = "/index.html"
+            self.path = "/associate.html"
+            path = "/associate.html"
+        # Gate every page except the login page itself.
+        if AUTH_ENABLED and path != "/login.html" and not self._is_authed():
+            # Redirect browsers to the login page.
+            self.send_response(302)
+            self.send_header("Location", "/login.html")
+            self.end_headers()
+            return
         return super().do_GET()
 
     def do_POST(self):
-        if self.path.startswith("/api/"):
+        path = self._path_only()
+        if path.startswith("/api/"):
+            if AUTH_ENABLED and path not in self.PUBLIC_PATHS and not self._is_authed():
+                return self._send_json({"error": "unauthorized"}, 401)
             return self.handle_api_post()
         self.send_error(404, "Not found")
 
@@ -243,6 +326,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 if "=" in kv:
                     k, v = kv.split("=", 1)
                     params[k] = v
+
+        if path == "/api/me":
+            # Tells the frontend whether auth is on and whether we're logged in.
+            return self._send_json({
+                "auth_enabled": AUTH_ENABLED,
+                "authenticated": self._is_authed(),
+            })
 
         if path == "/api/queries":
             # Optional filter: ?status=open
@@ -333,6 +423,41 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def handle_api_post(self):
         path = self.path.split("?")[0]
         data = self._read_json()
+
+        if path == "/api/login":
+            if not AUTH_ENABLED:
+                return self._send_json({"ok": True, "auth_enabled": False})
+            supplied = (data.get("password") or "")
+            if hmac.compare_digest(supplied, ANDON_PASSWORD):
+                token = make_token()
+                body = json.dumps({"ok": True}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                # HttpOnly cookie; SameSite=Lax. (Add 'Secure' once on HTTPS.)
+                self.send_header(
+                    "Set-Cookie",
+                    "%s=%s; Path=/; HttpOnly; SameSite=Lax; Max-Age=%d"
+                    % (COOKIE_NAME, token, SESSION_TTL),
+                )
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            return self._send_json({"error": "invalid_password"}, 401)
+
+        if path == "/api/logout":
+            body = json.dumps({"ok": True}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header(
+                "Set-Cookie",
+                "%s=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0" % COOKIE_NAME,
+            )
+            self.end_headers()
+            self.wfile.write(body)
+            return
 
         if path == "/api/queries":
             login = (data.get("associate_login") or "").strip()
@@ -433,11 +558,14 @@ def main():
     init_db()
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
     backend = "PostgreSQL (DATABASE_URL)" if USE_PG else f"SQLite ({DB_PATH})"
+    auth = "ON (password required)" if AUTH_ENABLED else "OFF (open — set ANDON_PASSWORD to require login)"
     print(f"Andon server running on port {PORT}")
+    print(f"  Login page       ->  http://localhost:{PORT}/login.html")
     print(f"  Associate window ->  http://localhost:{PORT}/associate.html")
     print(f"  SME console      ->  http://localhost:{PORT}/sme.html")
     print(f"  Dashboard        ->  http://localhost:{PORT}/dashboard.html")
     print(f"  Storage backend  ->  {backend}")
+    print(f"  Authentication   ->  {auth}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

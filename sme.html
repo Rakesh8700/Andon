@@ -124,6 +124,7 @@
       <div class="right">
         <span>Signed in as <span class="who" id="whoami"></span></span>
         <a href="dashboard.html" target="_blank">Dashboard</a>
+        <a href="#" onclick="andonLogout();return false;">Log out</a>
       </div>
     </div>
     <div class="main">
@@ -179,6 +180,11 @@ let smeLogin = '';
 let activeId = null;
 let queriesCache = {};
 let pollTimer = null;
+
+async function andonLogout() {
+  try { await fetch('/api/logout', { method: 'POST' }); } catch (e) {}
+  location.href = '/login.html';
+}
 
 function toast(msg) {
   const t = document.getElementById('toast');

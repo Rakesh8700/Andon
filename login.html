@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Andon Support — Sign in</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Amazon Ember", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    background: #12151b; color: #e8edf2; min-height: 100vh;
+    display: flex; align-items: center; justify-content: center; padding: 24px;
+  }
+  .card {
+    width: 100%; max-width: 380px; background: #1b1f27; border: 1px solid #2a2f3a;
+    border-radius: 12px; padding: 30px; box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+  }
+  h1 { font-size: 18px; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+  p.sub { font-size: 13px; color: #8a94a3; margin-bottom: 20px; }
+  label { display: block; font-size: 12px; color: #9aa4b2; margin-bottom: 6px; }
+  input[type=password] {
+    width: 100%; padding: 11px 12px; background: #12151b; border: 1px solid #2f3542;
+    border-radius: 8px; color: #e8edf2; font-size: 14px; outline: none;
+  }
+  input[type=password]:focus { border-color: #f0932b; }
+  .btn {
+    width: 100%; padding: 12px; border: none; border-radius: 8px; cursor: pointer;
+    font-size: 14px; font-weight: 700; margin-top: 16px; background: #f0932b; color: #1a1207;
+  }
+  .btn:hover { background: #e0850f; }
+  .btn:disabled { background: #3a3f49; color: #6b7480; cursor: not-allowed; }
+  .err { color: #ff8f8f; font-size: 12px; margin-top: 10px; min-height: 16px; }
+  .note { font-size: 11px; color: #6b7480; margin-top: 18px; line-height: 1.5; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>&#128274; Andon Support</h1>
+    <p class="sub">Enter the access password to continue.</p>
+    <label for="pw">Password</label>
+    <input type="password" id="pw" autofocus autocomplete="current-password"
+           onkeydown="if(event.key==='Enter')doLogin()">
+    <button class="btn" id="btn" onclick="doLogin()">Sign in</button>
+    <div class="err" id="err"></div>
+    <div class="note">Access is restricted. Contact the tool owner if you need the password.</div>
+  </div>
+
+<script>
+// If already authenticated (or auth is off), skip straight into the app.
+fetch('/api/me').then(r => r.json()).then(d => {
+  if (!d.auth_enabled || d.authenticated) {
+    location.href = redirectTarget();
+  }
+}).catch(() => {});
+
+function redirectTarget() {
+  // Allow ?next=sme.html etc; default to associate.html.
+  const params = new URLSearchParams(location.search);
+  const next = params.get('next');
+  const allowed = ['associate.html', 'sme.html', 'dashboard.html'];
+  return (next && allowed.includes(next)) ? ('/' + next) : '/associate.html';
+}
+
+async function doLogin() {
+  const pw = document.getElementById('pw').value;
+  const btn = document.getElementById('btn');
+  const err = document.getElementById('err');
+  err.textContent = '';
+  if (!pw) { err.textContent = 'Please enter the password.'; return; }
+  btn.disabled = true; btn.textContent = 'Signing in...';
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw })
+    });
+    const data = await res.json();
+    if (res.ok && data.ok) {
+      location.href = redirectTarget();
+      return;
+    }
+    err.textContent = 'Incorrect password. Try again.';
+  } catch (e) {
+    err.textContent = 'Could not reach the server. Try again.';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Sign in';
+  }
+}
+</script>
+</body>
+</html>
